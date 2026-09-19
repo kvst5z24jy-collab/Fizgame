@@ -757,7 +757,7 @@ app.post('/api/categories', async (req, res) => {
       return res.status(400).json({ error: 'Бөлім атауы бос болмауы керек' });
     }
     const cleanName = name.trim();
-    const cats = getCategories();
+    const cats = await getCategories();
     const existing = cats.find((c: any) => c.name.toLowerCase() === cleanName.toLowerCase());
     if (existing) {
       return res.status(400).json({ error: 'Бұл бөлім бұрыннан бар!' });
@@ -771,7 +771,7 @@ app.post('/api/categories', async (req, res) => {
       color: color || 'blue'
     };
     cats.push(newCat);
-    await saveCategories(cats);
+    await await saveCategories(cats);
     res.json({ success: true, category: newCat });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Бөлімді қосу қатесі' });
@@ -781,9 +781,9 @@ app.post('/api/categories', async (req, res) => {
 app.delete('/api/categories/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
-    const cats = getCategories();
+    const cats = await getCategories();
     const filtered = cats.filter((c: any) => c.id !== identifier && c.name.toLowerCase() !== identifier.toLowerCase());
-    await saveCategories(filtered);
+    await await saveCategories(filtered);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Бөлімді жою қатесі' });
@@ -799,7 +799,7 @@ app.get('/api/games', async (req, res) => {
 // 2. Get single game by ID or shareCode
 app.get('/api/games/:query', async (req, res) => {
   const { query } = req.params;
-  const games = getGames();
+  const games = await getGames();
   const game = games.find((g: any) => g.id === query || g.shareCode.toUpperCase() === query.toUpperCase());
   if (!game) {
     return res.status(404).json({ error: 'Сабақ табылмады!' });
@@ -936,7 +936,7 @@ app.post('/api/games', uploadSingleHtml, async (req, res) => {
       }
     }
 
-    const games = getGames();
+    const games = await getGames();
     const shareCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     let grades: string[] = [];
     if (Array.isArray(targetGrades)) {
@@ -967,7 +967,7 @@ app.post('/api/games', uploadSingleHtml, async (req, res) => {
     };
 
     games.unshift(newGame);
-    await saveGames(games);
+    await await saveGames(games);
 
     res.json({ success: true, game: newGame });
   } catch (error: any) {
@@ -979,7 +979,7 @@ app.post('/api/games', uploadSingleHtml, async (req, res) => {
 // 4. Update game settings
 app.put('/api/games/:id', async (req, res) => {
   const { id } = req.params;
-  const games = getGames();
+  const games = await getGames();
   const index = games.findIndex((g: any) => g.id === id);
   if (index === -1) {
     return res.status(404).json({ error: 'Ойын табылмады' });
@@ -992,21 +992,21 @@ app.put('/api/games/:id', async (req, res) => {
   if (deadline !== undefined) games[index].deadline = deadline;
   if (isActive !== undefined) games[index].isActive = Boolean(isActive);
 
-  saveGames(games);
+  await saveGames(games);
   res.json({ success: true, game: games[index] });
 });
 
 // 5. Delete game
 app.delete('/api/games/:id', async (req, res) => {
   const { id } = req.params;
-  const games = getGames();
+  const games = await getGames();
   const index = games.findIndex((g: any) => g.id === id);
   if (index === -1) {
     return res.status(404).json({ error: 'Ойын табылмады' });
   }
 
   const removed = games.splice(index, 1)[0];
-  saveGames(games);
+  await saveGames(games);
 
   // optionally remove file
   if (removed.blobPathname && BLOB_ENABLED) {
@@ -1032,7 +1032,7 @@ app.delete('/api/games/:id', async (req, res) => {
 // 6. Serve HTML game for iframe with injected Universal Bridge
 app.get('/api/play/:id', async (req, res) => {
   const { id } = req.params;
-  const games = getGames();
+  const games = await getGames();
   const game = games.find((g: any) => g.id === id || g.shareCode.toUpperCase() === id.toUpperCase());
 
   if (!game) {
@@ -1102,7 +1102,7 @@ app.post('/api/attempts', async (req, res) => {
       return res.status(400).json({ error: 'Оқушының аты-жөнін жазу қажет!' });
     }
 
-    const games = getGames();
+    const games = await getGames();
     const game = games.find((g: any) => g.id === gameId);
     const gameTitle = game ? game.title : 'Физика ойыны';
 
@@ -1126,7 +1126,7 @@ app.post('/api/attempts', async (req, res) => {
     };
 
     attempts.unshift(newAttempt);
-    await saveAttempts(attempts);
+    await await saveAttempts(attempts);
 
     // Update play count & average score on game
     if (game) {
@@ -1134,7 +1134,7 @@ app.post('/api/attempts', async (req, res) => {
       game.playCount = gameAttempts.length;
       const totalPct = gameAttempts.reduce((acc: number, cur: any) => acc + (cur.percentage || 0), 0);
       game.avgScore = Math.round(totalPct / gameAttempts.length);
-      saveGames(games);
+      await saveGames(games);
     }
 
     res.json({ success: true, attempt: newAttempt });
@@ -1167,7 +1167,7 @@ app.get('/api/attempts', async (req, res) => {
 // 9. Get single attempt details
 app.get('/api/attempts/:id', async (req, res) => {
   const { id } = req.params;
-  const attempts = getAttempts();
+  const attempts = await getAttempts();
   const attempt = attempts.find((a: any) => a.id === id);
   if (!attempt) {
     return res.status(404).json({ error: 'Нәтиже табылмады' });
@@ -1177,8 +1177,8 @@ app.get('/api/attempts/:id', async (req, res) => {
 
 // 10. Overall Dashboard Stats
 app.get('/api/stats', async (req, res) => {
-  const games = getGames();
-  const attempts = getAttempts();
+  const games = await getGames();
+  const attempts = await getAttempts();
 
   const uniqueStudents = new Set(attempts.map((a: any) => `${a.studentName}_${a.className || ''}`)).size;
   const avgPct = attempts.length
@@ -1217,7 +1217,7 @@ app.get('/api/qrcode', async (req, res) => {
 // 12. Export to CSV for Excel
 app.get('/api/export/csv', async (req, res) => {
   const { gameId } = req.query;
-  let attempts = getAttempts();
+  let attempts = await getAttempts();
   if (gameId) {
     attempts = attempts.filter((a: any) => a.gameId === gameId);
   }
