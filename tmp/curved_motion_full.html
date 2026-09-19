@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Қисық сызықты қозғалыс · аралас ойын</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;font-family:'Courier New',monospace}
+  body{margin:0;min-height:100vh;background:#0a0e1a;display:flex;justify-content:center;padding:6px}
+  .app{width:100%;max-width:420px;background:#141c2c;border-radius:28px;padding:14px 12px 20px;
+       box-shadow:0 10px 0 #06080e,0 0 0 3px #2a3a5a;display:flex;flex-direction:column;gap:10px;min-height:96vh}
+
+  /* Header */
+  .header{display:flex;justify-content:space-between;align-items:center;background:#0e1424;
+          padding:8px 14px;border-radius:40px;box-shadow:inset 0 -4px 0 #1f2e4a}
+  .title{color:#bfd9ff;font-size:13px;font-weight:bold;letter-spacing:.3px;text-shadow:2px 2px 0 #1a2a4a}
+  .mode-tag{background:#4a2e7a;color:#e0c0ff;font-size:11px;font-weight:bold;padding:4px 10px;
+            border-radius:20px;box-shadow:inset 0 -2px 0 #2a1a4a}
+  .score-box{background:#2a3a5a;padding:5px 12px;border-radius:30px;color:#f7e05e;font-weight:bold;
+             font-size:16px;box-shadow:inset 0 -3px 0 #0d1422;min-width:60px;text-align:center}
+
+  /* Progress */
+  .progress-row{display:flex;gap:8px;align-items:center;background:#0e1424;padding:6px 12px;
+                border-radius:30px;box-shadow:inset 0 -3px 0 #1f2e4a}
+  .progress-text{color:#8fa8d0;font-size:12px;font-weight:bold;white-space:nowrap}
+  .progress-bar-bg{flex:1;height:10px;background:#1a2a44;border-radius:6px;overflow:hidden;
+                   box-shadow:inset 0 2px 0 #0a0e18}
+  .progress-bar-fill{height:100%;background:linear-gradient(90deg,#44dd44,#ffcc00);width:0%;
+                     transition:width .3s ease}
+
+  /* Main card */
+  .card{background:#1e2a40;border-radius:22px;padding:16px 12px;text-align:center;
+        box-shadow:0 6px 0 #0c1220,inset 0 2px 0 #3f5a80;border:2px solid #3f5a80;transition:all .15s}
+  .card.correct{background:#1e4a2e;border-color:#44dd44;box-shadow:0 6px 0 #0a2a14}
+  .card.wrong{background:#4a1e2a;border-color:#ff5555;box-shadow:0 6px 0 #2a0a14}
+
+  .card-label{font-size:11px;color:#8fa8d0;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+  .card-question{font-size:20px;font-weight:bold;color:#fff;text-shadow:2px 2px 0 #0a0e18;
+                 line-height:1.35;min-height:66px;display:flex;align-items:center;justify-content:center;padding:4px}
+  .card-hint{font-size:12px;color:#8fa8d0;margin-top:6px;min-height:16px;font-style:italic}
+
+  /* Formula display (конструктор үшін) */
+  .formula-zone{background:#0d1422;border-radius:14px;padding:14px 8px;margin:8px 0;
+                min-height:60px;display:flex;align-items:center;justify-content:center;gap:6px;
+                flex-wrap:wrap;border:2px dashed #3f5a80}
+  .formula-slot{background:#1a2a44;border-radius:8px;min-width:38px;height:42px;display:flex;
+                align-items:center;justify-content:center;font-size:18px;font-weight:bold;color:#3f5a80;
+                border:2px dashed #2a3a5a;padding:0 6px}
+  .formula-slot.filled{background:#2e7a3e;color:#fff;border:2px solid #44dd44;
+                       box-shadow:0 3px 0 #0a3a14;text-shadow:1px 1px 0 #000}
+  .formula-slot.active{background:#4a3e1a;color:#ffcc00;border:2px solid #ffcc00;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+  /* Answer buttons */
+  .answers{display:flex;flex-direction:column;gap:8px;flex:1}
+  .btn{background:#2a3a5a;border:none;border-radius:18px;padding:14px 10px;font-size:16px;font-weight:bold;
+       color:#e0edff;text-shadow:2px 2px 0 #1a2a4a;box-shadow:0 5px 0 #0f1a2e,inset 0 2px 0 #4a6a9a;
+       cursor:pointer;transition:all .06s;font-family:inherit;width:100%;letter-spacing:.3px}
+  .btn:active{transform:translateY(3px);box-shadow:0 2px 0 #0f1a2e}
+  .btn:disabled{opacity:.5;transform:translateY(3px);box-shadow:0 2px 0 #0f1a2e}
+  .btn.correct-answer{background:#2e7a3e;box-shadow:0 5px 0 #0a3a14,inset 0 2px 0 #5aad6a}
+  .btn.wrong-answer{background:#7a2e3e;box-shadow:0 5px 0 #3a0a14,inset 0 2px 0 #ad5a6a}
+
+  /* Formula tokens (конструктор) */
+  .tokens{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:4px}
+  .token{background:#3a2a5a;border:none;border-radius:10px;padding:8px 12px;font-size:16px;font-weight:bold;
+         color:#e0c0ff;text-shadow:1px 1px 0 #1a0a2a;box-shadow:0 4px 0 #1a0a2a,inset 0 2px 0 #5a4a7a;
+         cursor:pointer;transition:all .06s;font-family:inherit}
+  .token:active{transform:translateY(3px);box-shadow:0 1px 0 #1a0a2a}
+  .token:disabled{opacity:.3}
+
+  /* Match mode */
+  .match-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+  .match-item{background:#2a3a5a;border-radius:14px;padding:14px 8px;font-size:14px;font-weight:bold;
+              color:#e0edff;text-shadow:1px 1px 0 #1a2a4a;box-shadow:0 5px 0 #0f1a2e,inset 0 2px 0 #4a6a9a;
+              cursor:pointer;transition:all .1s;text-align:center;min-height:56px;display:flex;
+              align-items:center;justify-content:center;font-family:inherit;border:none;width:100%}
+  .match-item:active{transform:translateY(3px);box-shadow:0 2px 0 #0f1a2e}
+  .match-item.selected{background:#4a3e1a;box-shadow:0 5px 0 #2a1e0a,inset 0 2px 0 #ffcc00;color:#ffcc00}
+  .match-item.matched{background:#2e7a3e;opacity:.4;pointer-events:none;box-shadow:0 3px 0 #0a3a14}
+
+  /* Toast */
+  .toast{text-align:center;font-size:13px;font-weight:bold;color:#f7e05e;text-shadow:2px 2px 0 #7a4d00;
+         min-height:20px;padding:3px;transition:all .2s}
+
+  /* Reset */
+  .reset-btn{background:#4f6e9e;border:none;font-family:inherit;font-weight:bold;font-size:14px;
+             color:#f0f9ff;text-shadow:2px 2px 0 #1a2a44;padding:10px 18px;border-radius:40px;
+             box-shadow:0 5px 0 #1f2e4a,inset 0 2px 0 #6a8aba;cursor:pointer;letter-spacing:.3px;white-space:nowrap}
+  .reset-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #1f2e4a}
+
+  .bottom-row{display:flex;gap:8px;align-items:center}
+  .bottom-row .reset-btn{flex-shrink:0}
+
+  /* Mode indicator */
+  .mode-badge{display:inline-block;background:#2a1a4a;color:#c0a0ff;font-size:10px;font-weight:bold;
+              padding:3px 10px;border-radius:12px;letter-spacing:1px;margin-bottom:4px}
+
+  @media(max-width:380px){
+    .card-question{font-size:17px;min-height:56px}
+    .btn{font-size:14px;padding:12px 8px}
+    .match-item{font-size:12px;padding:10px 6px}
+    .token{font-size:14px;padding:6px 10px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="title">🌀 ҚИСЫҚ СЫЗЫҚТЫ<br>ҚОЗҒАЛЫС</div>
+    <div class="score-box" id="scoreDisplay">0</div>
+  </div>
+
+  <!-- Mode indicator -->
+  <div style="text-align:center">
+    <span class="mode-badge" id="modeBadge">РЕЖИМ: СҰРАҚ-ЖАУАП</span>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-row">
+    <span class="progress-text" id="progressText">0/0</span>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+  </div>
+
+  <!-- Main card -->
+  <div class="card" id="card">
+    <div class="card-label" id="cardLabel">СҰРАҚ</div>
+    <div class="card-question" id="cardQuestion">Жүктелуде...</div>
+    <div class="card-hint" id="cardHint"></div>
+
+    <!-- Formula zone (тек конструктор режимінде) -->
+    <div id="formulaZone" style="display:none">
+      <div class="formula-zone" id="formulaZoneInner"></div>
+      <div class="tokens" id="tokensContainer"></div>
+    </div>
+
+    <!-- Match grid (сәйкестендіру режимінде) -->
+    <div id="matchZone" style="display:none">
+      <div class="match-grid" id="matchGrid"></div>
+    </div>
+  </div>
+
+  <!-- Answers (quiz режимі) -->
+  <div class="answers" id="answersContainer"></div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">Дайын бол!</div>
+
+  <!-- Bottom -->
+  <div class="bottom-row">
+    <button class="reset-btn" id="resetBtn" style="flex:1">ҚАЙТА БАСТАУ</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ============================================================
+  //  БАРЛЫҚ ТАПСЫРМАЛАР — ҚИСЫҚ СЫЗЫҚТЫ ҚОЗҒАЛЫС ТАҚЫРЫБЫ
+  //  4 ойын режимі араласқан:
+  //  1) quiz — сұрақ-жауап
+  //  2) constructor — формула құрастыру
+  //  3) match — сәйкестендіру
+  //  4) transform — формула түрлендіру (кері шама)
+  // ============================================================
+
+  const TASKS = [
+    // ---------- QUIZ: теориялық сұрақтар ----------
+    { type:'quiz', q:'Қисық сызықты қозғалыс дегеніміз не?',
+      correct:'траекториясы қисық сызық болатын қозғалыс',
+      options:['траекториясы түзу болатын қозғалыс','траекториясы қисық сызық болатын қозғалыс','тек шеңбер бойымен қозғалыс','тек парабола бойымен қозғалыс'],
+      hint:'Траектория пішініне қарай' },
+
+    { type:'quiz', q:'Шеңбер бойымен бірқалыпты қозғалыстағы үдеу қалай бағытталады?',
+      correct:'центрге қарай',
+      options:['центрге қарай','центрден тыс','жылдамдық бойымен','жылдамдыққа қарсы'],
+      hint:'Центрге тартқыш үдеу' },
+
+    { type:'quiz', q:'Центрге тартқыш үдеудің формуласы?',
+      correct:'a = v²/R',
+      options:['a = v²/R','a = v/R','a = vR','a = v²R'],
+      hint:'Жылдамдық квадраты / радиус' },
+
+    { type:'quiz', q:'Бұрыштық жылдамдықтың өлшем бірлігі?',
+      correct:'рад/с',
+      options:['рад/с','м/с','м/с²','Гц'],
+      hint:'Радиан / секунд' },
+
+    { type:'quiz', q:'Айналу периоды мен жиілігінің байланысы?',
+      correct:'T = 1/ν',
+      options:['T = 1/ν','T = ν','T = 2πν','T = ν²'],
+      hint:'Кері шама' },
+
+    { type:'quiz', q:'Бірқалыпты қозғалыстағы дененің жылдамдығы қалай өзгереді?',
+      correct:'модулі тұрақты, бағыты өзгереді',
+      options:['модулі де, бағыты да өзгермейді','модулі тұрақты, бағыты өзгереді','модулі өзгереді, бағыты тұрақты','екеуі де өзгереді'],
+      hint:'Қисық сызықты қозғалыста' },
+
+    { type:'quiz', q:'Еркін түсу кезіндегі дене траекториясы (көкжиекке бұрыш жасап лақтырылған)?',
+      correct:'парабола',
+      options:['түзу','шеңбер','парабола','гипербола'],
+      hint:'Ауырлық күші әсерінен' },
+
+    { type:'quiz', q:'Центрге тартқыш күштің формуласы?',
+      correct:'F = mv²/R',
+      options:['F = mv²/R','F = ma','F = mg','F = μN'],
+      hint:'Ньютонның 2-ші заңы арқылы' },
+
+    // ---------- CONSTRUCTOR: формула құрастыру ----------
+    { type:'constructor', target:'a = v²/R',
+      tokens:['a','=','v²','/','R'],
+      hint:'Центрге тартқыш үдеу' },
+
+    { type:'constructor', target:'T = 2πR/v',
+      tokens:['T','=','2πR','/','v'],
+      hint:'Айналу периоды (шеңбер ұзындығы / жылдамдық)' },
+
+    { type:'constructor', target:'ω = 2π/T',
+      tokens:['ω','=','2π','/','T'],
+      hint:'Бұрыштық жылдамдық' },
+
+    { type:'constructor', target:'F = mv²/R',
+      tokens:['F','=','mv²','/','R'],
+      hint:'Центрге тартқыш күш' },
+
+    { type:'constructor', target:'v = ωR',
+      tokens:['v','=','ω','·','R'],
+      hint:'Сызықтық жылдамдық' },
+
+    { type:'constructor', target:'a = ω²R',
+      tokens:['a','=','ω²','·','R'],
+      hint:'Центрге тартқыш үдеу (ω арқылы)' },
+
+    // ---------- MATCH: сәйкестендіру ----------
+    { type:'match',
+      pairs:[
+        {left:'a = v²/R', right:'центрге тартқыш үдеу'},
+        {left:'ω = 2π/T', right:'бұрыштық жылдамдық'},
+        {left:'T = 1/ν', right:'период пен жиілік'},
+        {left:'F = mv²/R', right:'центрге тартқыш күш'},
+        {left:'v = ωR', right:'сызықтық жылдамдық'}
+      ],
+      hint:'Формула мен атауын сәйкестендір' },
+
+    // ---------- TRANSFORM: формуланы түрлендіру ----------
+    { type:'transform', q:'a = v²/R берілген. v = ?',
+      correct:'v = √(aR)',
+      options:['v = √(aR)','v = aR','v = a/R','v = R/a'],
+      hint:'v-ны жалғыз қалдыр' },
+
+    { type:'transform', q:'T = 2πR/v берілген. v = ?',
+      correct:'v = 2πR/T',
+      options:['v = 2πR/T','v = 2πT/R','v = T/(2πR)','v = 2πRT'],
+      hint:'v-ны тап' },
+
+    { type:'transform', q:'F = mv²/R берілген. R = ?',
+      correct:'R = mv²/F',
+      options:['R = mv²/F','R = F/(mv²)','R = mv/F','R = Fv²/m'],
+      hint:'R-ді жалғыз қалдыр' },
+
+    { type:'transform', q:'v = ωR берілген. ω = ?',
+      correct:'ω = v/R',
+      options:['ω = v/R','ω = vR','ω = R/v','ω = v + R'],
+      hint:'ω-ны тап' },
+
+    { type:'transform', q:'a = ω²R берілген. R = ?',
+      correct:'R = a/ω²',
+      options:['R = a/ω²','R = aω²','R = ω²/a','R = a/ω'],
+      hint:'R-ді жалғыз қалдыр' },
+
+    { type:'transform', q:'T = 1/ν берілген. ν = ?',
+      correct:'ν = 1/T',
+      options:['ν = 1/T','ν = T','ν = 2πT','ν = T²'],
+      hint:'Жиілікті тап' },
+
+    { type:'transform', q:'a = v²/R берілген. R = ?',
+      correct:'R = v²/a',
+      options:['R = v²/a','R = a/v²','R = v/a','R = av²'],
+      hint:'R-ді тап' },
+  ];
+
+  // ============================================================
+  //  КҮЙ
+  // ============================================================
+  let queue = [];
+  let qIndex = 0;
+  let score = 0;
+  let answered = false;
+  let currentTask = null;
+  let correctCount = 0;
+  let wrongCount = 0;
+
+  // Constructor күйі
+  let builtFormula = [];
+  let targetTokens = [];
+
+  // Match күйі
+  let matchSelected = null;
+  let matchMatched = 0;
+  let matchTotal = 0;
+
+  // DOM
+  const card = document.getElementById('card');
+  const cardLabel = document.getElementById('cardLabel');
+  const cardQuestion = document.getElementById('cardQuestion');
+  const cardHint = document.getElementById('cardHint');
+  const answersContainer = document.getElementById('answersContainer');
+  const formulaZone = document.getElementById('formulaZone');
+  const formulaZoneInner = document.getElementById('formulaZoneInner');
+  const tokensContainer = document.getElementById('tokensContainer');
+  const matchZone = document.getElementById('matchZone');
+  const matchGrid = document.getElementById('matchGrid');
+  const scoreDisplay = document.getElementById('scoreDisplay');
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('progressFill');
+  const toast = document.getElementById('toast');
+  const modeBadge = document.getElementById('modeBadge');
+  const resetBtn = document.getElementById('resetBtn');
+
+  // ============================================================
+  //  Көмекші
+  // ============================================================
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+  function beep(freq,dur,type='square',vol=0.07){
+    try{
+      const ctx=new (window.AudioContext||window.webkitAudioContext)();
+      if(ctx.state==='suspended')ctx.resume();
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type=type;o.frequency.value=freq;g.gain.value=vol;
+      o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+dur);
+    }catch(e){}
+  }
+
+  function updateProgress(){
+    progressText.textContent = `${qIndex}/${queue.length}`;
+    progressFill.style.width = (qIndex/queue.length*100)+'%';
+    scoreDisplay.textContent = score;
+  }
+
+  function setCardState(state){
+    card.className = 'card';
+    if(state==='correct') card.classList.add('correct');
+    if(state==='wrong') card.classList.add('wrong');
+  }
+
+  // ============================================================
+  //  КЕЛЕСІ ТАПСЫРМА
+  // ============================================================
+  function nextTask(){
+    if(qIndex >= queue.length){
+      showFinish();
+      return;
+    }
+    answered = false;
+    currentTask = queue[qIndex];
+    setCardState('');
+
+    // Zone-дарды жасыру
+    formulaZone.style.display = 'none';
+    matchZone.style.display = 'none';
+    answersContainer.innerHTML = '';
+
+    // Режим бейджі
+    const modeNames = {quiz:'СҰРАҚ-ЖАУАП', constructor:'ФОРМУЛА ҚҰРАСТЫРУ',
+                       match:'СӘЙКЕСТЕНДІРУ', transform:'ФОРМУЛА ТҮРЛЕНДІРУ'};
+    modeBadge.textContent = 'РЕЖИМ: ' + (modeNames[currentTask.type]||'СҰРАҚ');
+
+    if(currentTask.type === 'quiz') showQuiz();
+    else if(currentTask.type === 'constructor') showConstructor();
+    else if(currentTask.type === 'match') showMatch();
+    else if(currentTask.type === 'transform') showTransform();
+
+    updateProgress();
+  }
+
+  // ============================================================
+  //  1) QUIZ режимі
+  // ============================================================
+  function showQuiz(){
+    cardLabel.textContent = 'СҰРАҚ';
+    cardQuestion.textContent = currentTask.q;
+    cardHint.textContent = currentTask.hint || '';
+
+    const opts = shuffle([...currentTask.options]);
+    opts.forEach(opt=>{
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = opt;
+      b.onclick = ()=> handleQuizAnswer(opt, currentTask.correct, b);
+      answersContainer.appendChild(b);
+    });
+  }
+
+  function handleQuizAnswer(selected, correct, btn){
+    if(answered) return;
+    answered = true;
+    document.querySelectorAll('.btn').forEach(b=>b.disabled=true);
+
+    if(selected === correct){
+      score++; correctCount++;
+      btn.classList.add('correct-answer');
+      setCardState('correct');
+      toast.textContent = '✅ ДҰРЫС!';
+      beep(1200,0.1); beep(1600,0.1);
+    } else {
+      wrongCount++;
+      btn.classList.add('wrong-answer');
+      setCardState('wrong');
+      toast.textContent = '❌ ҚАТЕ! Дұрыс: ' + correct;
+      beep(300,0.15,'sawtooth');
+      document.querySelectorAll('.btn').forEach(b=>{
+        if(b.textContent === correct) b.classList.add('correct-answer');
+      });
+    }
+    scoreDisplay.textContent = score;
+    setTimeout(()=>{ qIndex++; nextTask(); }, 1300);
+  }
+
+  // ============================================================
+  //  2) CONSTRUCTOR режимі
+  // ============================================================
+  function showConstructor(){
+    cardLabel.textContent = 'ФОРМУЛА ҚҰРАСТЫР';
+    cardQuestion.textContent = currentTask.hint;
+    cardHint.textContent = 'Токендерді дұрыс ретпен басып, формуланы жина';
+
+    // Нысана токендер
+    targetTokens = [...currentTask.tokens];
+    builtFormula = [];
+
+    // Формула слоттары
+    renderFormulaSlots();
+
+    // Токендерді араластырып көрсету
+    const shuffled = shuffle([...currentTask.tokens]);
+    tokensContainer.innerHTML = '';
+    shuffled.forEach((tok, idx)=>{
+      const b = document.createElement('button');
+      b.className = 'token';
+      b.textContent = tok;
+      b.dataset.token = tok;
+      b.onclick = ()=> handleTokenClick(tok, b);
+      tokensContainer.appendChild(b);
+    });
+
+    formulaZone.style.display = 'block';
+  }
+
+  function renderFormulaSlots(){
+    formulaZoneInner.innerHTML = '';
+    const n = targetTokens.length;
+    for(let i=0;i<n;i++){
+      const slot = document.createElement('div');
+      slot.className = 'formula-slot';
+      if(i < builtFormula.length){
+        slot.classList.add('filled');
+        slot.textContent = builtFormula[i];
+      } else if(i === builtFormula.length){
+        slot.classList.add('active');
+        slot.textContent = '?';
+      } else {
+        slot.textContent = '·';
+      }
+      formulaZoneInner.appendChild(slot);
+    }
+  }
+
+  function handleTokenClick(token, btn){
+    if(answered) return;
+    if(builtFormula.length >= targetTokens.length) return;
+
+    // Токенді қосу
+    builtFormula.push(token);
+    btn.disabled = true;
+    renderFormulaSlots();
+    beep(800,0.05,'square',0.04);
+
+    // Толық жиналды ма?
+    if(builtFormula.length === targetTokens.length){
+      answered = true;
+      // Тексеру
+      const isCorrect = builtFormula.every((t,i)=> t === targetTokens[i]);
+      if(isCorrect){
+        score++; correctCount++;
+        setCardState('correct');
+        toast.textContent = '✅ ФОРМУЛА ДҰРЫС!';
+        beep(1200,0.1); beep(1600,0.1);
+      } else {
+        wrongCount++;
+        setCardState('wrong');
+        toast.textContent = '❌ ҚАТЕ! Дұрыс: ' + targetTokens.join(' ');
+        beep(300,0.15,'sawtooth');
+      }
+      scoreDisplay.textContent = score;
+      // Барлық токендерді өшіру
+      document.querySelectorAll('.token').forEach(b=>b.disabled=true);
+      setTimeout(()=>{ qIndex++; nextTask(); }, 1500);
+    }
+  }
+
+  // ============================================================
+  //  3) MATCH режимі
+  // ============================================================
+  function showMatch(){
+    cardLabel.textContent = 'СӘЙКЕСТЕНДІРУ';
+    cardQuestion.textContent = currentTask.hint;
+    cardHint.textContent = 'Формуланы атауымен сәйкестендір';
+
+    const pairs = currentTask.pairs;
+    matchTotal = pairs.length;
+    matchMatched = 0;
+    matchSelected = null;
+
+    // Барлық элементтерді араластырып бір тізімге салу
+    const allItems = [];
+    pairs.forEach((p, i)=>{
+      allItems.push({id:'L'+i, pairId:i, text:p.left, side:'left'});
+      allItems.push({id:'R'+i, pairId:i, text:p.right, side:'right'});
+    });
+    shuffle(allItems);
+
+    matchGrid.innerHTML = '';
+    allItems.forEach(item=>{
+      const b = document.createElement('button');
+      b.className = 'match-item';
+      b.textContent = item.text;
+      b.dataset.pairId = item.pairId;
+      b.dataset.side = item.side;
+      b.dataset.id = item.id;
+      b.onclick = ()=> handleMatchClick(b);
+      matchGrid.appendChild(b);
+    });
+
+    matchZone.style.display = 'block';
+  }
+
+  function handleMatchClick(btn){
+    if(answered) return;
+    if(btn.classList.contains('matched')) return;
+
+    // Бірінші таңдау
+    if(!matchSelected){
+      matchSelected = btn;
+      btn.classList.add('selected');
+      beep(700,0.05,'square',0.04);
+      return;
+    }
+
+    // Сол батырманы қайта басу — алу
+    if(matchSelected === btn){
+      btn.classList.remove('selected');
+      matchSelected = null;
+      return;
+    }
+
+    // Екінші таңдау — тексеру
+    const first = matchSelected;
+    const second = btn;
+
+    // Бір жақтан екеуі де болмауы керек
+    if(first.dataset.side === second.dataset.side){
+      first.classList.remove('selected');
+      matchSelected = second;
+      second.classList.add('selected');
+      beep(500,0.05,'square',0.04);
+      return;
+    }
+
+    // Дұрыс па?
+    if(first.dataset.pairId === second.dataset.pairId){
+      // Сәйкес!
+      first.classList.remove('selected');
+      first.classList.add('matched');
+      second.classList.add('matched');
+      matchMatched++;
+      score++; correctCount++;
+      scoreDisplay.textContent = score;
+      toast.textContent = '✅ ДҰРЫС!';
+      beep(1200,0.1); beep(1600,0.1);
+      matchSelected = null;
+
+      if(matchMatched === matchTotal){
+        answered = true;
+        setCardState('correct');
+        toast.textContent = '🎉 БАРЛЫҒЫ СӘЙКЕСТІ!';
+        setTimeout(()=>{ qIndex++; nextTask(); }, 1300);
+      }
+    } else {
+      // Қате
+      first.classList.remove('selected');
+      first.classList.add('wrong-answer');
+      second.classList.add('wrong-answer');
+      wrongCount++;
+      setCardState('wrong');
+      toast.textContent = '❌ ҚАТЕ! Қайта көр';
+      beep(300,0.15,'sawtooth');
+      setTimeout(()=>{
+        first.classList.remove('wrong-answer');
+        second.classList.remove('wrong-answer');
+        setCardState('');
+      }, 600);
+      matchSelected = null;
+    }
+  }
+
+  // ============================================================
+  //  4) TRANSFORM режимі
+  // ============================================================
+  function showTransform(){
+    cardLabel.textContent = 'ФОРМУЛА ТҮРЛЕНДІРУ';
+    cardQuestion.textContent = currentTask.q;
+    cardHint.textContent = currentTask.hint || '';
+
+    const opts = shuffle([...currentTask.options]);
+    opts.forEach(opt=>{
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = opt;
+      b.onclick = ()=> handleQuizAnswer(opt, currentTask.correct, b);
+      answersContainer.appendChild(b);
+    });
+  }
+
+  // ============================================================
+  //  ФИНАЛ
+  // ============================================================
+  function showFinish(){
+    cardLabel.textContent = '🎉 ОЙЫН БІТТІ!';
+    cardQuestion.textContent = `Ұпай: ${score} / ${queue.length}`;
+    cardHint.textContent = `${correctCount} дұрыс · ${wrongCount} қате`;
+    answersContainer.innerHTML = '';
+    formulaZone.style.display = 'none';
+    matchZone.style.display = 'none';
+    modeBadge.textContent = 'РЕЖИМ: АЯҚТАЛДЫ';
+
+    // Universal Bridge арқылы нәтижені сабақ журналына өткізу
+    if (window.reportResult) {
+      window.reportResult({
+        score: score,
+        total: queue.length,
+        percentage: Math.round((score / queue.length) * 100)
+      });
+    }
+
+    const restart = document.createElement('button');
+    restart.className = 'btn';
+    restart.textContent = '🔄 ҚАЙТА БАСТАУ';
+    restart.style.background = '#4f6e9e';
+    restart.onclick = ()=> resetGame();
+    answersContainer.appendChild(restart);
+
+    progressFill.style.width = '100%';
+    progressText.textContent = `${queue.length}/${queue.length}`;
+    beep(880,0.15); beep(1046,0.15); beep(1318,0.2);
+  }
+
+  // ============================================================
+  //  RESET
+  // ============================================================
+  function resetGame(){
+    queue = shuffle([...TASKS]);
+    qIndex = 0;
+    score = 0;
+    correctCount = 0;
+    wrongCount = 0;
+    answered = false;
+    matchSelected = null;
+    setCardState('');
+    toast.textContent = 'Дайын бол!';
+    updateProgress();
+    nextTask();
+    beep(660,0.1,'square',0.05);
+    beep(880,0.1,'square',0.05);
+  }
+
+  resetBtn.onclick = resetGame;
+
+  // Дыбыс инициализациясы (мобильді)
+  document.body.addEventListener('touchstart', function initAudio(){
+    try{
+      const ctx=new (window.AudioContext||window.webkitAudioContext)();
+      if(ctx.state==='suspended')ctx.resume();
+    }catch(e){}
+    document.body.removeEventListener('touchstart', initAudio);
+  }, {once:true});
+
+  // Бастау
+  resetGame();
+})();
+</script>
+</body>
+</html>

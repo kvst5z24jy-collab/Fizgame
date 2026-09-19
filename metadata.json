@@ -1,0 +1,6 @@
+{
+  "name": "Физика әлемі — Ойын арқылы оқыту платформасы",
+  "description": "7-11 сынып оқушыларына арналған физиканы интерактивті HTML ойындар арқылы оқыту, нәтижелер журналы және қатемен жұмыс платформасы.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

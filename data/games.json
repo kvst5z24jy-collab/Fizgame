@@ -1,0 +1,58 @@
+[
+  {
+    "id": "game-1789797568515",
+    "title": "Қисық сызықты қозғалыс · аралас ойын",
+    "description": "",
+    "category": "Кинематика",
+    "targetGrades": [
+      "7",
+      "8",
+      "9"
+    ],
+    "fileName": "curved_motion_full.html",
+    "originalName": "curved_motion.html",
+    "shareCode": "7AE016",
+    "deadline": null,
+    "isActive": true,
+    "createdAt": "2026-09-19T05:59:28.515Z",
+    "playCount": 0,
+    "avgScore": 0
+  },
+  {
+    "id": "game-kinematics-1",
+    "title": "Кинематика: Жылдамдық пен Үдеу формулалары",
+    "description": "Жылдамдық, уақыт, арақашықтық және еркін түсу үдеуіне арналған практикалық интерактивті тапсырмалар.",
+    "category": "Кинематика",
+    "targetGrades": [
+      "7",
+      "8",
+      "9"
+    ],
+    "fileName": "kinematics.html",
+    "originalName": "kinematics_quiz.html",
+    "shareCode": "KINEMA",
+    "deadline": null,
+    "isActive": true,
+    "createdAt": "2026-09-18T12:35:50.325Z",
+    "playCount": 14,
+    "avgScore": 75
+  },
+  {
+    "id": "game-newton-2",
+    "title": "Ньютон заңдары және Күштер динамикасы",
+    "description": "Инерция, күштер әрекеті, F=ma және ауырлық күші заңдарын бекітуге арналған тренажер.",
+    "category": "Динамика",
+    "targetGrades": [
+      "8",
+      "9",
+      "10"
+    ],
+    "fileName": "newton.html",
+    "shareCode": "NEWTON",
+    "deadline": null,
+    "isActive": true,
+    "createdAt": "2026-09-18T12:35:50.326Z",
+    "playCount": 9,
+    "avgScore": 82
+  }
+]
