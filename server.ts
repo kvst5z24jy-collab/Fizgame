@@ -894,7 +894,7 @@ app.post('/api/games', uploadSingleHtml, async (req, res) => {
       // Basic content validation. We intentionally do not require a specific
       // game framework: any valid HTML document is allowed.
       const uploadedContent = fs.readFileSync(uploadedPath, 'utf8');
-      if (!/<html[\\s>]/i.test(uploadedContent) && !/<body[\\s>]/i.test(uploadedContent)) {
+      if (!/<html[\s>]/i.test(uploadedContent) && !/<body[\s>]/i.test(uploadedContent)) {
         fs.unlinkSync(uploadedPath);
         return res.status(400).json({ error: 'Файл HTML құжатына ұқсамайды. <html> немесе <body> тегі табылмады.' });
       }
