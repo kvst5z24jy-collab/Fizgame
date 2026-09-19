@@ -771,7 +771,7 @@ app.post('/api/categories', async (req, res) => {
       color: color || 'blue'
     };
     cats.push(newCat);
-    await await saveCategories(cats);
+    await saveCategories(cats);
     res.json({ success: true, category: newCat });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Бөлімді қосу қатесі' });
@@ -783,7 +783,7 @@ app.delete('/api/categories/:identifier', async (req, res) => {
     const { identifier } = req.params;
     const cats = await getCategories();
     const filtered = cats.filter((c: any) => c.id !== identifier && c.name.toLowerCase() !== identifier.toLowerCase());
-    await await saveCategories(filtered);
+    await saveCategories(filtered);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Бөлімді жою қатесі' });
@@ -967,7 +967,7 @@ app.post('/api/games', uploadSingleHtml, async (req, res) => {
     };
 
     games.unshift(newGame);
-    await await saveGames(games);
+    await saveGames(games);
 
     res.json({ success: true, game: newGame });
   } catch (error: any) {
@@ -1126,7 +1126,7 @@ app.post('/api/attempts', async (req, res) => {
     };
 
     attempts.unshift(newAttempt);
-    await await saveAttempts(attempts);
+    await saveAttempts(attempts);
 
     // Update play count & average score on game
     if (game) {
