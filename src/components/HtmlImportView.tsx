@@ -144,7 +144,16 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
       // directly from the browser to Vercel Blob, then send only metadata
       // (pathname/title/etc.) to /api/games.
       let blobPathname: string | null = null;
-      const useBlobUpload = window.location.hostname.endsWith('.vercel.app') || window.location.hostname !== 'localhost';
+      let useBlobUpload = false;
+      try {
+        const healthResponse = await fetch('/api/health', { signal: controller.signal });
+        if (healthResponse.ok) {
+          const health = await healthResponse.json();
+          useBlobUpload = Boolean(health.blobStorageConfigured);
+        }
+      } catch {
+        // The normal upload error below will explain if the backend is unavailable.
+      }
 
       if (useBlobUpload) {
         const fileForUpload = importMode === 'file'
