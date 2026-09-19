@@ -548,7 +548,7 @@ initializeDatabase();
 // Persistent storage
 // Local development can continue using the JSON files in /data.
 // On Vercel, durable state is stored in a private Vercel Blob store.
-const BLOB_ENABLED = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const BLOB_ENABLED = Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL);
 const BLOB_ACCESS = 'private' as const;
 const BLOB_DATA_PREFIX = 'fizgame/data/';
 const BLOB_GAME_PREFIX = 'fizgame/games/';
@@ -822,7 +822,11 @@ app.post('/api/blob-upload', async (req, res) => {
       body: req.body,
       request: req,
       onBeforeGenerateToken: async (pathname: string) => {
-        const safeName = path.basename(pathname || 'game.html').toLowerCase();
+        const normalizedPath = String(pathname || '');
+        const safeName = path.basename(normalizedPath).toLowerCase();
+        if (!normalizedPath.startsWith(BLOB_GAME_PREFIX)) {
+          throw new Error('Файл тек Fizgame ойындар қалтасына жүктелуі керек.');
+        }
         if (!safeName.endsWith('.html') && !safeName.endsWith('.htm')) {
           throw new Error('Тек .html немесе .htm файл жүктеуге болады.');
         }
