@@ -4,6 +4,8 @@ import fs from 'fs';
 import multer from 'multer';
 import QRCode from 'qrcode';
 import { createServer as createViteServer } from 'vite';
+import { del as blobDelete, get as blobGet, put as blobPut } from '@vercel/blob';
+import { handleUpload } from '@vercel/blob/client';
 
 const app = express();
 const PORT = 3000;
@@ -543,41 +545,97 @@ function initializeDatabase() {
 
 initializeDatabase();
 
-// Helper readers/writers
-function getGames() {
+// Persistent storage
+// Local development can continue using the JSON files in /data.
+// On Vercel, durable state is stored in a private Vercel Blob store.
+const BLOB_ENABLED = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const BLOB_ACCESS = 'private' as const;
+const BLOB_DATA_PREFIX = 'fizgame/data/';
+const BLOB_GAME_PREFIX = 'fizgame/games/';
+
+async function streamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  return await new Response(stream).text();
+}
+
+async function readPersistentJson<T>(pathname: string, fallbackFile: string, fallback: T): Promise<T> {
+  if (!BLOB_ENABLED) {
+    try {
+      return JSON.parse(fs.readFileSync(fallbackFile, 'utf8')) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
   try {
-    return JSON.parse(fs.readFileSync(GAMES_FILE, 'utf8'));
-  } catch (e) {
-    return [];
+    const result = await blobGet(pathname, { access: BLOB_ACCESS });
+    if (result?.statusCode === 200 && result.stream) {
+      return JSON.parse(await streamToText(result.stream)) as T;
+    }
+  } catch (error) {
+    console.error('[BLOB READ]', pathname, error);
+  }
+
+  // First deployment: seed the Blob store from the repository's JSON files.
+  try {
+    let seed = fallback;
+    if (fs.existsSync(fallbackFile)) {
+      seed = JSON.parse(fs.readFileSync(fallbackFile, 'utf8')) as T;
+    }
+    await blobPut(pathname, JSON.stringify(seed, null, 2), {
+      access: BLOB_ACCESS,
+      contentType: 'application/json',
+      allowOverwrite: true
+    });
+    return seed;
+  } catch (error) {
+    console.error('[BLOB SEED]', pathname, error);
+    return fallback;
   }
 }
 
-function saveGames(games: any[]) {
-  fs.writeFileSync(GAMES_FILE, JSON.stringify(games, null, 2), 'utf8');
-}
-
-function getCategories() {
-  try {
-    return JSON.parse(fs.readFileSync(CATEGORIES_FILE, 'utf8'));
-  } catch (e) {
-    return [];
+async function writePersistentJson(pathname: string, fallbackFile: string, value: any): Promise<void> {
+  if (!BLOB_ENABLED) {
+    fs.writeFileSync(fallbackFile, JSON.stringify(value, null, 2), 'utf8');
+    return;
   }
+
+  await blobPut(pathname, JSON.stringify(value, null, 2), {
+    access: BLOB_ACCESS,
+    contentType: 'application/json',
+    allowOverwrite: true
+  });
 }
 
-function saveCategories(categories: any[]) {
-  fs.writeFileSync(CATEGORIES_FILE, JSON.stringify(categories, null, 2), 'utf8');
+async function getGames() {
+  return await readPersistentJson<any[]>(BLOB_DATA_PREFIX + 'games.json', GAMES_FILE, []);
 }
 
-function getAttempts() {
-  try {
-    return JSON.parse(fs.readFileSync(ATTEMPTS_FILE, 'utf8'));
-  } catch (e) {
-    return [];
-  }
+async function saveGames(games: any[]) {
+  await writePersistentJson(BLOB_DATA_PREFIX + 'games.json', GAMES_FILE, games);
 }
 
-function saveAttempts(attempts: any[]) {
-  fs.writeFileSync(ATTEMPTS_FILE, JSON.stringify(attempts, null, 2), 'utf8');
+async function getCategories() {
+  return await readPersistentJson<any[]>(BLOB_DATA_PREFIX + 'categories.json', CATEGORIES_FILE, []);
+}
+
+async function saveCategories(categories: any[]) {
+  await writePersistentJson(BLOB_DATA_PREFIX + 'categories.json', CATEGORIES_FILE, categories);
+}
+
+async function getAttempts() {
+  return await readPersistentJson<any[]>(BLOB_DATA_PREFIX + 'attempts.json', ATTEMPTS_FILE, []);
+}
+
+async function saveAttempts(attempts: any[]) {
+  await writePersistentJson(BLOB_DATA_PREFIX + 'attempts.json', ATTEMPTS_FILE, attempts);
+}
+
+async function readGameHtml(blobPathname: string): Promise<string | null> {
+  if (!BLOB_ENABLED) return null;
+  if (!blobPathname.startsWith(BLOB_GAME_PREFIX)) return null;
+  const result = await blobGet(blobPathname, { access: BLOB_ACCESS });
+  if (!result || result.statusCode !== 200 || !result.stream) return null;
+  return await streamToText(result.stream);
 }
 
 // Multer storage for HTML files
@@ -680,17 +738,19 @@ app.get('/api/health', (req, res) => {
     success: true,
     service: 'fizgame',
     uploadReady: fs.existsSync(UPLOAD_DIR),
-    maxHtmlFileMb: MAX_HTML_FILE_SIZE / 1024 / 1024
+    blobStorageConfigured: BLOB_ENABLED,
+    maxHtmlFileMb: MAX_HTML_FILE_SIZE / 1024 / 1024,
+    vercel: Boolean(process.env.VERCEL)
   });
 });
 
 // Categories (Физика бөлімдері)
-app.get('/api/categories', (req, res) => {
-  const cats = getCategories();
+app.get('/api/categories', async (req, res) => {
+  const cats = await getCategories();
   res.json(cats);
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', async (req, res) => {
   try {
     const { name, description, grades, color } = req.body;
     if (!name || !name.trim()) {
@@ -711,19 +771,19 @@ app.post('/api/categories', (req, res) => {
       color: color || 'blue'
     };
     cats.push(newCat);
-    saveCategories(cats);
+    await saveCategories(cats);
     res.json({ success: true, category: newCat });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Бөлімді қосу қатесі' });
   }
 });
 
-app.delete('/api/categories/:identifier', (req, res) => {
+app.delete('/api/categories/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
     const cats = getCategories();
     const filtered = cats.filter((c: any) => c.id !== identifier && c.name.toLowerCase() !== identifier.toLowerCase());
-    saveCategories(filtered);
+    await saveCategories(filtered);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Бөлімді жою қатесі' });
@@ -731,13 +791,13 @@ app.delete('/api/categories/:identifier', (req, res) => {
 });
 
 // 1. Get all active games (for student or catalog)
-app.get('/api/games', (req, res) => {
-  const games = getGames();
+app.get('/api/games', async (req, res) => {
+  const games = await getGames();
   res.json(games);
 });
 
 // 2. Get single game by ID or shareCode
-app.get('/api/games/:query', (req, res) => {
+app.get('/api/games/:query', async (req, res) => {
   const { query } = req.params;
   const games = getGames();
   const game = games.find((g: any) => g.id === query || g.shareCode.toUpperCase() === query.toUpperCase());
@@ -747,14 +807,70 @@ app.get('/api/games/:query', (req, res) => {
   res.json(game);
 });
 
-// 3. Upload / Create new game
-app.post('/api/games', uploadSingleHtml, (req, res) => {
+// 3. Vercel Blob client-upload token endpoint.
+// The browser uploads the HTML directly to Blob, avoiding Vercel's 4.5 MB
+// Function request-body limit. The actual game record is created separately.
+app.post('/api/blob-upload', async (req, res) => {
+  if (!BLOB_ENABLED) {
+    return res.status(503).json({
+      error: 'Vercel Blob бапталмаған. Vercel жобасының Storage бөлімінен Blob store қосыңыз.'
+    });
+  }
+
   try {
-    const { title, description, category, targetGrades, deadline, htmlContent } = req.body;
+    const jsonResponse = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async (pathname: string) => {
+        const safeName = path.basename(pathname || 'game.html').toLowerCase();
+        if (!safeName.endsWith('.html') && !safeName.endsWith('.htm')) {
+          throw new Error('Тек .html немесе .htm файл жүктеуге болады.');
+        }
+
+        return {
+          allowedContentTypes: ['text/html', 'text/plain', 'application/octet-stream'],
+          maximumSizeInBytes: MAX_HTML_FILE_SIZE,
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({ kind: 'physics-game' })
+        };
+      },
+      onUploadCompleted: async ({ blob }) => {
+        console.log('[BLOB UPLOAD COMPLETED]', blob.pathname);
+      }
+    });
+
+    return res.json(jsonResponse);
+  } catch (error: any) {
+    console.error('[BLOB UPLOAD]', error);
+    return res.status(400).json({ error: error.message || 'Blob жүктеу токенін жасау мүмкін болмады.' });
+  }
+});
+
+// 4. Upload / Create new game
+app.post('/api/games', uploadSingleHtml, async (req, res) => {
+  try {
+    const { title, description, category, targetGrades, deadline, htmlContent, blobPathname } = req.body;
     let fileName = '';
     let originalName = 'game.html';
+    let storedBlobPath = '';
 
-    if (req.file) {
+    if (blobPathname) {
+      if (!BLOB_ENABLED) {
+        return res.status(503).json({ error: 'Vercel Blob бапталмаған.' });
+      }
+      if (typeof blobPathname !== 'string' || !blobPathname.startsWith(BLOB_GAME_PREFIX)) {
+        return res.status(400).json({ error: 'Жүктелген файлдың сақтау жолы жарамсыз.' });
+      }
+
+      const blobHtml = await readGameHtml(blobPathname);
+      if (!blobHtml || !/<html[\s>]/i.test(blobHtml) && !/<body[\s>]/i.test(blobHtml)) {
+        return res.status(400).json({ error: 'Жүктелген файл HTML құжатына ұқсамайды.' });
+      }
+
+      storedBlobPath = blobPathname;
+      fileName = path.basename(blobPathname);
+      originalName = path.basename(blobPathname);
+    } else if (req.file) {
       fileName = req.file.filename;
       originalName = req.file.originalname || 'game.html';
 
@@ -792,7 +908,11 @@ app.post('/api/games', uploadSingleHtml, (req, res) => {
     // Auto-detect title from HTML if not provided
     if (!detectedTitle) {
       let contentToInspect = '';
-      if (req.file) {
+      if (storedBlobPath) {
+        try {
+          contentToInspect = await readGameHtml(storedBlobPath) || '';
+        } catch(e) {}
+      } else if (req.file) {
         try {
           contentToInspect = fs.readFileSync(path.join(UPLOAD_DIR, fileName), 'utf8');
         } catch(e) {}
@@ -833,6 +953,7 @@ app.post('/api/games', uploadSingleHtml, (req, res) => {
       targetGrades: grades.length ? grades : ['7', '8', '9', '10', '11'],
       fileName,
       originalName,
+      blobPathname: storedBlobPath || null,
       shareCode,
       deadline: deadline ? new Date(deadline).toISOString() : null,
       isActive: true,
@@ -842,7 +963,7 @@ app.post('/api/games', uploadSingleHtml, (req, res) => {
     };
 
     games.unshift(newGame);
-    saveGames(games);
+    await saveGames(games);
 
     res.json({ success: true, game: newGame });
   } catch (error: any) {
@@ -852,7 +973,7 @@ app.post('/api/games', uploadSingleHtml, (req, res) => {
 });
 
 // 4. Update game settings
-app.put('/api/games/:id', (req, res) => {
+app.put('/api/games/:id', async (req, res) => {
   const { id } = req.params;
   const games = getGames();
   const index = games.findIndex((g: any) => g.id === id);
@@ -872,7 +993,7 @@ app.put('/api/games/:id', (req, res) => {
 });
 
 // 5. Delete game
-app.delete('/api/games/:id', (req, res) => {
+app.delete('/api/games/:id', async (req, res) => {
   const { id } = req.params;
   const games = getGames();
   const index = games.findIndex((g: any) => g.id === id);
@@ -884,6 +1005,14 @@ app.delete('/api/games/:id', (req, res) => {
   saveGames(games);
 
   // optionally remove file
+  if (removed.blobPathname && BLOB_ENABLED) {
+    try {
+      await blobDelete(removed.blobPathname, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    } catch (e) {
+      console.error('Could not delete Blob game file:', e);
+    }
+  }
+
   const filePath = path.join(UPLOAD_DIR, removed.fileName);
   if (fs.existsSync(filePath)) {
     try {
@@ -897,7 +1026,7 @@ app.delete('/api/games/:id', (req, res) => {
 });
 
 // 6. Serve HTML game for iframe with injected Universal Bridge
-app.get('/api/play/:id', (req, res) => {
+app.get('/api/play/:id', async (req, res) => {
   const { id } = req.params;
   const games = getGames();
   const game = games.find((g: any) => g.id === id || g.shareCode.toUpperCase() === id.toUpperCase());
@@ -906,12 +1035,21 @@ app.get('/api/play/:id', (req, res) => {
     return res.status(404).send('<h2>Сабақ табылмады</h2>');
   }
 
-  const filePath = path.join(UPLOAD_DIR, game.fileName);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('<h2>Ойын файлы табылмады</h2>');
+  let htmlContent = '';
+
+  if (game.blobPathname && BLOB_ENABLED) {
+    htmlContent = await readGameHtml(game.blobPathname) || '';
+  } else {
+    const filePath = path.join(UPLOAD_DIR, game.fileName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('<h2>Ойын файлы табылмады</h2>');
+    }
+    htmlContent = fs.readFileSync(filePath, 'utf8');
   }
 
-  let htmlContent = fs.readFileSync(filePath, 'utf8');
+  if (!htmlContent) {
+    return res.status(404).send('<h2>Ойын файлы табылмады</h2>');
+  }
 
   // Universal Bridge script injected into <head> or at the top
   const bridgeScript = `
@@ -952,7 +1090,7 @@ app.get('/api/play/:id', (req, res) => {
 });
 
 // 7. Record student attempt
-app.post('/api/attempts', (req, res) => {
+app.post('/api/attempts', async (req, res) => {
   try {
     const { gameId, studentName, className, score, total, percentage, durationSec, mistakes } = req.body;
 
@@ -968,7 +1106,7 @@ app.post('/api/attempts', (req, res) => {
     const cleanTotal = Number(total) || 1;
     const cleanPct = percentage !== undefined ? Math.round(Number(percentage)) : Math.round((cleanScore / cleanTotal) * 100);
 
-    const attempts = getAttempts();
+    const attempts = await getAttempts();
     const newAttempt = {
       id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       gameId,
@@ -984,7 +1122,7 @@ app.post('/api/attempts', (req, res) => {
     };
 
     attempts.unshift(newAttempt);
-    saveAttempts(attempts);
+    await saveAttempts(attempts);
 
     // Update play count & average score on game
     if (game) {
@@ -1003,9 +1141,9 @@ app.post('/api/attempts', (req, res) => {
 });
 
 // 8. Get attempts list with filters
-app.get('/api/attempts', (req, res) => {
+app.get('/api/attempts', async (req, res) => {
   const { gameId, studentName, className } = req.query;
-  let attempts = getAttempts();
+  let attempts = await getAttempts();
 
   if (gameId) {
     attempts = attempts.filter((a: any) => a.gameId === gameId);
@@ -1023,7 +1161,7 @@ app.get('/api/attempts', (req, res) => {
 });
 
 // 9. Get single attempt details
-app.get('/api/attempts/:id', (req, res) => {
+app.get('/api/attempts/:id', async (req, res) => {
   const { id } = req.params;
   const attempts = getAttempts();
   const attempt = attempts.find((a: any) => a.id === id);
@@ -1034,7 +1172,7 @@ app.get('/api/attempts/:id', (req, res) => {
 });
 
 // 10. Overall Dashboard Stats
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
   const games = getGames();
   const attempts = getAttempts();
 
@@ -1073,7 +1211,7 @@ app.get('/api/qrcode', async (req, res) => {
 });
 
 // 12. Export to CSV for Excel
-app.get('/api/export/csv', (req, res) => {
+app.get('/api/export/csv', async (req, res) => {
   const { gameId } = req.query;
   let attempts = getAttempts();
   if (gameId) {
@@ -1153,4 +1291,8 @@ async function startServer() {
   });
 }
 
-startServer();
+export default app;
+
+if (!process.env.VERCEL) {
+  startServer();
+}
