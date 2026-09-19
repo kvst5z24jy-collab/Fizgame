@@ -397,8 +397,7 @@ const SAMPLE_TEMPLATE_HTML = `<!DOCTYPE html>
     <button onclick="answer(false, 'Тізбектей жалғауда ток күші барлық бөлікте бірдей болады: I = I₁ = I₂.')">А) Тармақтарға бөлінеді</button>
     <button onclick="answer(true, 'Өте дұрыс!')">Б) Барлық бөлігінде бірдей болады</button>
     <button onclick="answer(false, 'Кернеу ғана бөлінеді, ток күші бірдей қалады.')">В) Үнемі артып отырады</button>
-    <div id="res" style="margin-top: 16px; font-weight: bold;"></div>
-  </div>
+    <div id="res" style="margin-top: 16px; font-weight: bold;"></div>  </div>
 
   <script>
     // Ойын біткен кезде осы функция нәтижені платформаға жібереді:
@@ -582,52 +581,87 @@ function saveAttempts(attempts: any[]) {
 }
 
 // Multer storage for HTML files
+const MAX_HTML_FILE_SIZE = 50 * 1024 * 1024;
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
+    try {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      cb(null, UPLOAD_DIR);
+    } catch (error) {
+      cb(error as Error, UPLOAD_DIR);
+    }
   },
   filename: (req, file, cb) => {
-    const cleanName = (file.originalname || 'game.html').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const unique = `${Date.now()}-${cleanName}`;
+    // Browser-provided filenames can contain non-ASCII characters. Keep the
+    // extension, but normalize the rest so the file is safe on all platforms.
+    const original = file.originalname || 'game.html';
+    const ext = path.extname(original).toLowerCase();
+    const base = path.basename(original, path.extname(original))
+      .normalize('NFKD')
+      .replace(/[^\p{L}\p{N}._-]+/gu, '_')
+      .replace(/^\.+|\.+$/g, '')
+      .slice(0, 120) || 'game';
+    const safeExt = ext === '.htm' ? '.htm' : '.html';
+    const unique = `${Date.now()}-${base}${safeExt}`;
     cb(null, unique);
   }
 });
 
 const upload = multer({
   storage,
-  limits: { 
-    fileSize: 50 * 1024 * 1024, // 50 MB max file
-    fieldSize: 50 * 1024 * 1024, // 50 MB max text field (e.g. pasted HTML)
+  limits: {
+    fileSize: MAX_HTML_FILE_SIZE,
+    fieldSize: MAX_HTML_FILE_SIZE,
     fields: 100
   },
   fileFilter: (req, file, cb) => {
-    const orig = (file.originalname || '').toLowerCase();
-    const isHtmlExt = orig.endsWith('.html') || orig.endsWith('.htm');
-    const isHtmlMime = file.mimetype === 'text/html' || file.mimetype === 'application/xhtml+xml' || file.mimetype === 'application/octet-stream' || file.mimetype === 'text/plain';
-    
-    // Accept if file extension ends with .html/.htm or mime type is html
-    if (isHtmlExt || isHtmlMime) {
+    const originalName = (file.originalname || '').trim();
+    const ext = path.extname(originalName).toLowerCase();
+    const allowedExtension = ext === '.html' || ext === '.htm';
+
+    // Browsers and Windows may report HTML as text/html, text/plain,
+    // application/octet-stream, or an empty/unknown MIME type. The extension
+    // is therefore the authoritative check for this endpoint.
+    if (allowedExtension) {
       cb(null, true);
-    } else {
-      cb(new Error('Тек HTML (.html, .htm) файлдарды жүктеуге болады! Таңдалған файл түрі: ' + (file.mimetype || 'белгісіз')));
+      return;
     }
+
+    cb(new Error(
+      `Тек HTML (.html, .htm) файлды жүктеуге болады. Таңдалған файл: ${originalName || 'атаусыз файл'}`
+    ));
   }
 });
 
-// Helper middleware to handle both multipart/form-data and direct JSON uploads seamlessly
 const uploadSingleHtml = (req: any, res: any, next: any) => {
-  if (req.is('multipart/form-data')) {
-    upload.single('file')(req, res, (err: any) => {
-      if (err) {
-        console.error('Multer upload error:', err.message);
-        return res.status(400).json({ error: err.message || 'Файлды жүктеу барысында қате шықты!' });
-      }
-      next();
-    });
-  } else {
-    // If request is application/json or other, body is already parsed by express.json()
+  if (!req.is('multipart/form-data')) {
     next();
+    return;
   }
+
+  upload.single('file')(req, res, (err: any) => {
+    if (!err) {
+      next();
+      return;
+    }
+
+    console.error('[HTML UPLOAD] Multer error:', err);
+
+    if (err instanceof multer.MulterError) {
+      const messages: Record<string, string> = {
+        LIMIT_FILE_SIZE: `HTML файл тым үлкен. Максималды өлшем: ${MAX_HTML_FILE_SIZE / 1024 / 1024} MB.`,
+        LIMIT_FIELD_SIZE: 'HTML мәтіні тым үлкен.',
+        LIMIT_UNEXPECTED_FILE: 'Файл өрісі дұрыс емес. HTML файлын «file» өрісі арқылы жіберу қажет.'
+      };
+      return res.status(err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_FIELD_SIZE' ? 413 : 400)
+        .json({ error: messages[err.code] || `Файлды жүктеу қатесі: ${err.message}` });
+    }
+
+    return res.status(400).json({
+      error: err.message || 'HTML файлды жүктеу барысында қате шықты.'
+    });
+  });
 };
 
 // Middleware
@@ -637,6 +671,18 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // ----------------------------------------------------
 // API ROUTES
 // ----------------------------------------------------
+
+
+// Upload/API health check. This is intentionally simple so the UI can
+// distinguish a real upload error from an unavailable backend.
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    service: 'fizgame',
+    uploadReady: fs.existsSync(UPLOAD_DIR),
+    maxHtmlFileMb: MAX_HTML_FILE_SIZE / 1024 / 1024
+  });
+});
 
 // Categories (Физика бөлімдері)
 app.get('/api/categories', (req, res) => {
@@ -710,9 +756,29 @@ app.post('/api/games', uploadSingleHtml, (req, res) => {
 
     if (req.file) {
       fileName = req.file.filename;
-      originalName = req.file.originalname;
+      originalName = req.file.originalname || 'game.html';
+
+      const uploadedPath = path.join(UPLOAD_DIR, fileName);
+      if (!fs.existsSync(uploadedPath)) {
+        return res.status(500).json({ error: 'HTML файл серверге қабылданды, бірақ сақтау кезінде табылмады.' });
+      }
+
+      // Reject empty files early and provide a useful error instead of creating
+      // a broken game record.
+      const uploadedSize = fs.statSync(uploadedPath).size;
+      if (uploadedSize === 0) {
+        fs.unlinkSync(uploadedPath);
+        return res.status(400).json({ error: 'HTML файл бос болып тұр.' });
+      }
+
+      // Basic content validation. We intentionally do not require a specific
+      // game framework: any valid HTML document is allowed.
+      const uploadedContent = fs.readFileSync(uploadedPath, 'utf8');
+      if (!/<html[\\s>]/i.test(uploadedContent) && !/<body[\\s>]/i.test(uploadedContent)) {
+        fs.unlinkSync(uploadedPath);
+        return res.status(400).json({ error: 'Файл HTML құжатына ұқсамайды. <html> немесе <body> тегі табылмады.' });
+      }
     } else if (htmlContent && typeof htmlContent === 'string' && htmlContent.trim().length > 0) {
-      // Direct paste
       fileName = `${Date.now()}-custom.html`;
       fs.writeFileSync(path.join(UPLOAD_DIR, fileName), htmlContent, 'utf8');
       originalName = 'custom.html';
@@ -797,8 +863,7 @@ app.put('/api/games/:id', (req, res) => {
   const { title, description, category, targetGrades, deadline, isActive } = req.body;
   if (title !== undefined) games[index].title = title;
   if (description !== undefined) games[index].description = description;
-  if (category !== undefined) games[index].category = category;
-  if (targetGrades !== undefined) games[index].targetGrades = targetGrades;
+  if (category !== undefined) games[index].category = category;  if (targetGrades !== undefined) games[index].targetGrades = targetGrades;
   if (deadline !== undefined) games[index].deadline = deadline;
   if (isActive !== undefined) games[index].isActive = Boolean(isActive);
 
