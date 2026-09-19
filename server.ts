@@ -567,7 +567,7 @@ async function readPersistentJson<T>(pathname: string, fallbackFile: string, fal
   }
 
   try {
-    const result = await blobGet(pathname, { access: BLOB_ACCESS });
+    const result = await blobGet(pathname, { access: BLOB_ACCESS, useCache: false });
     if (result?.statusCode === 200 && result.stream) {
       return JSON.parse(await streamToText(result.stream)) as T;
     }
@@ -633,7 +633,7 @@ async function saveAttempts(attempts: any[]) {
 async function readGameHtml(blobPathname: string): Promise<string | null> {
   if (!BLOB_ENABLED) return null;
   if (!blobPathname.startsWith(BLOB_GAME_PREFIX)) return null;
-  const result = await blobGet(blobPathname, { access: BLOB_ACCESS });
+  const result = await blobGet(blobPathname, { access: BLOB_ACCESS, useCache: false });
   if (!result || result.statusCode !== 200 || !result.stream) return null;
   return await streamToText(result.stream);
 }
