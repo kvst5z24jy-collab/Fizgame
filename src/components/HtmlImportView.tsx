@@ -104,8 +104,26 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
     }
 
     if (importMode === 'file' && !selectedFile) {
-      setStatus({ type: 'error', message: 'Компьютерден HTML (.html) файлын таңдаңыз' });
+      setStatus({ type: 'error', message: 'Компьютерден HTML (.html/.htm) файлын таңдаңыз' });
       return;
+    }
+
+    if (importMode === 'file' && selectedFile) {
+      const lowerName = selectedFile.name.toLowerCase();
+      const isHtml = lowerName.endsWith('.html') || lowerName.endsWith('.htm');
+      const maxSize = 50 * 1024 * 1024;
+      if (!isHtml) {
+        setStatus({ type: 'error', message: 'Тек .html немесе .htm файл қабылданады.' });
+        return;
+      }
+      if (selectedFile.size === 0) {
+        setStatus({ type: 'error', message: 'Таңдалған HTML файл бос.' });
+        return;
+      }
+      if (selectedFile.size > maxSize) {
+        setStatus({ type: 'error', message: 'HTML файл тым үлкен. Максималды өлшем: 50 MB.' });
+        return;
+      }
     }
 
     if (importMode === 'code' && !pastedHtml.trim()) {
@@ -117,6 +135,8 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
     setStatus(null);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 120000);
       let res: Response;
 
       if (importMode === 'code') {
@@ -133,7 +153,8 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
             targetGrades,
             deadline: deadline || null,
             htmlContent: pastedHtml
-          })
+          }),
+          signal: controller.signal
         });
       } else {
         const formData = new FormData();
@@ -146,9 +167,12 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
 
         res = await fetch('/api/games', {
           method: 'POST',
-          body: formData
+          body: formData,
+          signal: controller.signal
         });
       }
+
+      window.clearTimeout(timeoutId);
 
       const contentType = res.headers.get('content-type') || '';
       let data: any = {};
@@ -179,7 +203,19 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
         throw new Error(data.error || `Импорттау сәтсіз аяқталды (${res.status})`);
       }
     } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Серверге жүктеу кезінде қате орын алды' });
+      if (err?.name === 'AbortError') {
+        setStatus({
+          type: 'error',
+          message: 'Сервер жауап бермеді (120 секунд). Сервердің жұмысын және HTML файл өлшемін тексеріңіз.'
+        });
+      } else if (err instanceof TypeError) {
+        setStatus({
+          type: 'error',
+          message: 'Серверге қосылу мүмкін болмады. Backend іске қосылғанын тексеріңіз.'
+        });
+      } else {
+        setStatus({ type: 'error', message: err.message || 'Серверге жүктеу кезінде қате орын алды' });
+      }
     } finally {
       setIsSubmitting(false);
     }
