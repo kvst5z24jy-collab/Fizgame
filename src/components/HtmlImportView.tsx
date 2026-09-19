@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { upload as uploadToBlob } from '@vercel/blob/client';
 import {
   UploadCloud, FileCode, CheckCircle2, AlertCircle, Download,
   Sparkles, Plus, Code, HelpCircle, Check, ArrowRight, Layers
@@ -139,37 +140,84 @@ export const HtmlImportView: React.FC<HtmlImportViewProps> = ({
       const timeoutId = window.setTimeout(() => controller.abort(), 120000);
       let res: Response;
 
-      if (importMode === 'code') {
-        // Direct JSON POST: ultra-reliable, bypasses multipart limitations and preserves exact code
+      // Vercel Functions have a 4.5 MB request-body limit. Upload the HTML
+      // directly from the browser to Vercel Blob, then send only metadata
+      // (pathname/title/etc.) to /api/games.
+      let blobPathname: string | null = null;
+      const useBlobUpload = window.location.hostname.endsWith('.vercel.app') || window.location.hostname !== 'localhost';
+
+      if (useBlobUpload) {
+        const fileForUpload = importMode === 'file'
+          ? selectedFile
+          : new File([pastedHtml], 'physics-game.html', { type: 'text/html' });
+
+        if (!fileForUpload) {
+          throw new Error('HTML файл таңдалмады.');
+        }
+
+        const blob = await uploadToBlob(
+          `fizgame/games/${Date.now()}-${fileForUpload.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}`,
+          fileForUpload,
+          {
+            access: 'private',
+            handleUploadUrl: '/api/blob-upload',
+            multipart: fileForUpload.size > 4 * 1024 * 1024,
+            abortSignal: controller.signal,
+            onUploadProgress: (progress) => {
+              setStatus({
+                type: 'success',
+                message: `HTML жүктелуде: ${Math.round(progress.percentage)}%`
+              });
+            }
+          }
+        );
+
+        blobPathname = blob.pathname;
+
         res = await fetch('/api/games', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: effectiveTitle,
             description: description.trim(),
             category: category || 'Жалпы физика',
             targetGrades,
             deadline: deadline || null,
-            htmlContent: pastedHtml
+            blobPathname
           }),
           signal: controller.signal
         });
       } else {
-        const formData = new FormData();
-        formData.append('title', effectiveTitle);
-        formData.append('description', description.trim());
-        formData.append('category', category || 'Жалпы физика');
-        formData.append('targetGrades', JSON.stringify(targetGrades));
-        if (deadline) formData.append('deadline', deadline);
-        if (selectedFile) formData.append('file', selectedFile);
+        // Local-development fallback when Vercel Blob is intentionally disabled.
+        if (importMode === 'code') {
+          res = await fetch('/api/games', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: effectiveTitle,
+              description: description.trim(),
+              category: category || 'Жалпы физика',
+              targetGrades,
+              deadline: deadline || null,
+              htmlContent: pastedHtml
+            }),
+            signal: controller.signal
+          });
+        } else {
+          const formData = new FormData();
+          formData.append('title', effectiveTitle);
+          formData.append('description', description.trim());
+          formData.append('category', category || 'Жалпы физика');
+          formData.append('targetGrades', JSON.stringify(targetGrades));
+          if (deadline) formData.append('deadline', deadline);
+          if (selectedFile) formData.append('file', selectedFile);
 
-        res = await fetch('/api/games', {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal
-        });
+          res = await fetch('/api/games', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+          });
+        }
       }
 
       window.clearTimeout(timeoutId);
